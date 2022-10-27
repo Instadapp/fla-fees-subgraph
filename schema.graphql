@@ -1,6 +1,8 @@
-type ExampleEntity @entity {
+type FeeData @entity {
+  # user + '#' + token address
   id: ID!
-  count: BigInt!
-  previousAdmin: Bytes! # address
-  newAdmin: Bytes! # address
+  user: Bytes!
+  token: Bytes!
+  flaFee: Int!
+  routeFee: Int!
 }

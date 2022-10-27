@@ -1,4 +1,4 @@
-specVersion: 0.0.1
+specVersion: 0.0.4
 schema:
   file: ./schema.graphql
 dataSources:
@@ -10,20 +10,18 @@ dataSources:
       abi: FLA
     mapping:
       kind: ethereum/events
-      apiVersion: 0.0.5
+      apiVersion: 0.0.6
       language: wasm/assemblyscript
       entities:
-        - AdminChanged
-        - BeaconUpgraded
-        - Upgraded
+        - FeeData
       abis:
         - name: FLA
           file: ./abis/FLA.json
-      eventHandlers:
-        - event: AdminChanged(address,address)
-          handler: handleAdminChanged
-        - event: BeaconUpgraded(indexed address)
-          handler: handleBeaconUpgraded
-        - event: Upgraded(indexed address)
-          handler: handleUpgraded
+      callHandlers:
+        - function: executeOperation(address[],uint256[],uint256[],address,bytes)
+          handler: handleExecuteOperation
+        - function: onFlashLoan(address,address,uint256,uint256,bytes)
+          handler: handleOnFlashloan
+        - function: receiveFlashLoan(address[],uint256[],uint256[],bytes)
+          handler: handleReceiveFlashloan
       file: ./src/fla.ts

@@ -1,55 +1,113 @@
-import { BigInt } from "@graphprotocol/graph-ts"
+import { Address, BigInt, ethereum } from "@graphprotocol/graph-ts";
 import {
+  ExecuteOperationCall,
   FLA,
-  AdminChanged,
-  BeaconUpgraded,
-  Upgraded
-} from "../generated/FLA/FLA"
-import { ExampleEntity } from "../generated/schema"
+  OnFlashLoanCall,
+  ReceiveFlashLoanCall,
+} from "../generated/FLA/FLA";
+import { FeeData } from "../generated/schema";
 
-export function handleAdminChanged(event: AdminChanged): void {
-  // Entities can be loaded from the store using a string ID; this ID
-  // needs to be unique across all entities of the same type
-  let entity = ExampleEntity.load(event.transaction.from.toHex())
+// const DAI = new Address(0x6b175474e89094c44da98b954eedeac495271d0f);
+export function handleExecuteOperation(call: ExecuteOperationCall): void {
+  // let assets = call.inputs._assets;
+  // let amounts = call.inputs._amounts;
+  // let user = call.inputs._initiator;
+  let fees = call.inputs._premiums;
+  let length = fees.length;
+  let data_ = call.inputs._data;
 
-  // Entities only exist after they have been saved to the store;
-  // `null` checks allow to create entities on demand
-  if (!entity) {
-    entity = new ExampleEntity(event.transaction.from.toHex())
+  let decoded = ethereum.decode("(uint256,address[],uint256[],address,bytes)", data_)?.toTuple();
+  if (decoded != undefined) {
+    let tokens = decoded[1].toArray();
+    let amounts = decoded[2].toArray();
+    let user = decoded[3].toAddress();
 
-    // Entity fields can be set using simple assignments
-    entity.count = BigInt.fromI32(0)
+    for (let i = 0; i < length; i++) {
+      let id = user.toHexString() + "#" + tokens[i].toAddress().toHexString();
+      let data = createOrLoadFeeData(id);
+      data.user = user;
+      data.token = tokens[i].toAddress();
+
+      let instaAmt_ = amounts[i]
+        .toBigInt()
+        .times(BigInt.fromI32(5))
+        .div(BigInt.fromI32(1e4));
+      if (instaAmt_ > fees[i]) {
+        data.flaFee += instaAmt_.minus(fees[i]).toI32();
+      }
+      data.routeFee += fees[i].toI32();
+      data.save();
+    }
   }
-
-  // BigInt and BigDecimal math are supported
-  entity.count = entity.count + BigInt.fromI32(1)
-
-  // Entity fields can be set based on event parameters
-  entity.previousAdmin = event.params.previousAdmin
-  entity.newAdmin = event.params.newAdmin
-
-  // Entities can be written to the store with `.save()`
-  entity.save()
-
-  // Note: If a handler doesn't require existing field values, it is faster
-  // _not_ to load the entity from the store. Instead, create it fresh with
-  // `new Entity(...)`, set the fields that should be updated and save the
-  // entity back to the store. Fields that were not set or unset remain
-  // unchanged, allowing for partial updates to be applied.
-
-  // It is also possible to access smart contracts from mappings. For
-  // example, the contract that has emitted the event can be connected to
-  // with:
-  //
-  // let contract = Contract.bind(event.address)
-  //
-  // The following functions can then be called on this contract to access
-  // state variables and other data:
-  //
-  // - contract.admin(...)
-  // - contract.implementation(...)
 }
 
-export function handleBeaconUpgraded(event: BeaconUpgraded): void {}
+export function handleOnFlashloan(call: OnFlashLoanCall): void {
+  // let amount = call.inputs._amount;
+  let fee = call.inputs._fee;
+  let data_ = call.inputs._data;
+  let decoded = ethereum.decode("(uint256,address[],uint256[],address,bytes)", data_)?.toTuple();
+  if (decoded != undefined) {
+    let tokens = decoded[1].toArray();
+    let amounts = decoded[2].toArray();
+    let user = decoded[3].toAddress();
 
-export function handleUpgraded(event: Upgraded): void {}
+    for (let i = 0; i < tokens.length; i++) {
+      let id = user.toHexString() + "#" + tokens[i].toAddress().toHexString();
+      let data = createOrLoadFeeData(id);
+      data.user = user;
+      data.token = tokens[i].toAddress();
+
+      let instaAmt_ = amounts[i]
+        .toBigInt()
+        .times(BigInt.fromI32(5))
+        .div(BigInt.fromI32(1e4));
+      if (instaAmt_ > fee) {
+        data.flaFee += instaAmt_.minus(fee).toI32();
+      }
+      data.routeFee += fee.toI32();
+      data.save();
+    }
+  }
+}
+
+export function handleReceiveFlashloan(call: ReceiveFlashLoanCall): void {
+  let fees = call.inputs._fees;
+  let length = fees.length;
+  let data_ = call.inputs._data;
+
+  let decoded = ethereum.decode("(uint256,address[],uint256[],address,bytes)", data_)?.toTuple();
+  if (decoded != undefined) {
+    let tokens = decoded[1].toArray();
+    let amounts = decoded[2].toArray();
+    let user = decoded[3].toAddress();
+
+    for (let i = 0; i < length; i++) {
+      let id = user.toHexString() + "#" + tokens[i].toAddress().toHexString();
+      let data = createOrLoadFeeData(id);
+      data.user = user;
+      data.token = tokens[i].toAddress();
+
+      let instaAmt_ = amounts[i]
+        .toBigInt()
+        .times(BigInt.fromI32(5))
+        .div(BigInt.fromI32(1e4));
+      if (instaAmt_ > fees[i]) {
+        data.flaFee += instaAmt_.minus(fees[i]).toI32();
+      }
+      data.routeFee += fees[i].toI32();
+      data.save();
+    }
+  }
+}
+
+export function createOrLoadFeeData(id: string): FeeData {
+  let data = FeeData.load(id);
+  if (data == null) {
+    data = new FeeData(id);
+    data.user = new Address(0);
+    data.token = new Address(0);
+    data.flaFee = 0;
+    data.routeFee = 0;
+  }
+  return data;
+}
