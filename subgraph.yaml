@@ -8,6 +8,7 @@ dataSources:
     source:
       address: "0x619Ad2D02dBeE6ebA3CDbDA3F98430410e892882"
       abi: FLA
+      startBlock: 13710800
     mapping:
       kind: ethereum/events
       apiVersion: 0.0.6
@@ -18,9 +19,9 @@ dataSources:
         - name: FLA
           file: ./abis/FLA.json
         - name: Balancer
-          file: ./abis/Balancer.json 
+          file: ./abis/Balancer.json
         - name: Maker
-          file: ./abis/Maker.json 
+          file: ./abis/Maker.json
       eventHandlers:
         - event: LogFlashloan(indexed address,indexed uint256,address[],uint256[])
           handler: handleFlashloan
@@ -31,6 +32,7 @@ dataSources:
     source:
       address: "0x1EB4CF3A948E7D72A198fe073cCb8C7a948cD853"
       abi: Maker
+      startBlock: 12652206
     mapping:
       kind: ethereum/events
       apiVersion: 0.0.6
@@ -41,7 +43,7 @@ dataSources:
         - name: FLA
           file: ./abis/FLA.json
         - name: Maker
-          file: ./abis/Maker.json 
+          file: ./abis/Maker.json
       eventHandlers:
         - event: File(indexed bytes32,uint256)
           handler: handleMakerTollChanged
@@ -52,6 +54,7 @@ dataSources:
     source:
       address: "0xce88686553686DA562CE7Cea497CE749DA109f9F"
       abi: Balancer
+      startBlock: 13710826
     mapping:
       kind: ethereum/events
       apiVersion: 0.0.6
