@@ -1,102 +1,61 @@
-import { Address, BigInt, ethereum } from "@graphprotocol/graph-ts";
+import { Address, BigInt, Bytes, ethereum } from "@graphprotocol/graph-ts";
 import {
   ExecuteOperationCall,
   FLA,
+  LogFlashloan,
   OnFlashLoanCall,
   ReceiveFlashLoanCall,
 } from "../generated/FLA/FLA";
+import { FlashLoanFeePercentageChanged } from "../generated/Balancer/Balancer";
+import { File } from "../generated/Maker/Maker";
 import { FeeData } from "../generated/schema";
 
 // const DAI = new Address(0x6b175474e89094c44da98b954eedeac495271d0f);
-export function handleExecuteOperation(call: ExecuteOperationCall): void {
-  // let assets = call.inputs._assets;
-  // let amounts = call.inputs._amounts;
-  // let user = call.inputs._initiator;
-  let fees = call.inputs._premiums;
-  let length = fees.length;
-  let data_ = call.inputs._data;
+var balancerFee = BigInt.fromI32(0);
+var makerBPS = BigInt.fromI32(0);
+const e4 = BigInt.fromI32(10).pow(4);
+const e14 = BigInt.fromI32(10).pow(14);
+const e18 = BigInt.fromI32(10).pow(18);
+export function handleFlashloan(event: LogFlashloan): void {
+  //balancer: result = product == 0 ? 0 : ((product - 1) / FixedPoint.ONE) + 1;
+  //maker: _mul(amount, toll) / WAD
+  let tokens = event.params.tokens;
+  let route = event.params.route.toI32();
+  let amounts = event.params.amounts;
+  let user = event.params.account;
 
-  let decoded = ethereum.decode("(uint256,address[],uint256[],address,bytes)", data_)?.toTuple();
-  if (decoded != undefined) {
-    let tokens = decoded[1].toArray();
-    let amounts = decoded[2].toArray();
-    let user = decoded[3].toAddress();
+  for (let i = 0; i < tokens.length; i++) {
+    let id = user.toHexString() + "#" + tokens[i].toHexString();
+    let data = createOrLoadFeeData(id);
+    data.user = user;
+    data.token = tokens[i];
 
-    for (let i = 0; i < length; i++) {
-      let id = user.toHexString() + "#" + tokens[i].toAddress().toHexString();
-      let data = createOrLoadFeeData(id);
-      data.user = user;
-      data.token = tokens[i].toAddress();
-
-      let instaAmt_ = amounts[i]
-        .toBigInt()
-        .times(BigInt.fromI32(5))
-        .div(BigInt.fromI32(1e4));
-      if (instaAmt_ > fees[i]) {
-        data.flaFee += instaAmt_.minus(fees[i]).toI32();
+    let fees_ = BigInt.fromI32(0);
+    if (route == 1) {
+      fees_ = amounts[i].times(BigInt.fromI32(9)).div((e4));
+    } else if (route == 2 || route == 3 || route == 4) {
+      fees_ = amounts[i].times(makerBPS).div((e4));
+    } else if (route == 5 || route == 6 || route == 7) {
+      let pdt_ = amounts[i].times(balancerFee);
+      if (pdt_.toI32() == 0) {
+        fees_ = BigInt.fromI32(0);
+      } else {
+        fees_ = pdt_
+          .minus(BigInt.fromI32(1))
+          .div(e18)
+          .plus(BigInt.fromI32(1));
       }
-      data.routeFee += fees[i].toI32();
-      data.save();
     }
-  }
-}
 
-export function handleOnFlashloan(call: OnFlashLoanCall): void {
-  // let amount = call.inputs._amount;
-  let fee = call.inputs._fee;
-  let data_ = call.inputs._data;
-  let decoded = ethereum.decode("(uint256,address[],uint256[],address,bytes)", data_)?.toTuple();
-  if (decoded != undefined) {
-    let tokens = decoded[1].toArray();
-    let amounts = decoded[2].toArray();
-    let user = decoded[3].toAddress();
+    let instaFees = amounts[i]
+      .times(BigInt.fromI32(5))
+      .div(e4);
 
-    for (let i = 0; i < tokens.length; i++) {
-      let id = user.toHexString() + "#" + tokens[i].toAddress().toHexString();
-      let data = createOrLoadFeeData(id);
-      data.user = user;
-      data.token = tokens[i].toAddress();
-
-      let instaAmt_ = amounts[i]
-        .toBigInt()
-        .times(BigInt.fromI32(5))
-        .div(BigInt.fromI32(1e4));
-      if (instaAmt_ > fee) {
-        data.flaFee += instaAmt_.minus(fee).toI32();
-      }
-      data.routeFee += fee.toI32();
-      data.save();
+    if (instaFees > fees_) {
+      data.flaFee = instaFees.minus(fees_).toI32();
     }
-  }
-}
-
-export function handleReceiveFlashloan(call: ReceiveFlashLoanCall): void {
-  let fees = call.inputs._fees;
-  let length = fees.length;
-  let data_ = call.inputs._data;
-
-  let decoded = ethereum.decode("(uint256,address[],uint256[],address,bytes)", data_)?.toTuple();
-  if (decoded != undefined) {
-    let tokens = decoded[1].toArray();
-    let amounts = decoded[2].toArray();
-    let user = decoded[3].toAddress();
-
-    for (let i = 0; i < length; i++) {
-      let id = user.toHexString() + "#" + tokens[i].toAddress().toHexString();
-      let data = createOrLoadFeeData(id);
-      data.user = user;
-      data.token = tokens[i].toAddress();
-
-      let instaAmt_ = amounts[i]
-        .toBigInt()
-        .times(BigInt.fromI32(5))
-        .div(BigInt.fromI32(1e4));
-      if (instaAmt_ > fees[i]) {
-        data.flaFee += instaAmt_.minus(fees[i]).toI32();
-      }
-      data.routeFee += fees[i].toI32();
-      data.save();
-    }
+    data.routeFee = fees_.toI32();
+    data.save();
   }
 }
 
@@ -110,4 +69,14 @@ export function createOrLoadFeeData(id: string): FeeData {
     data.routeFee = 0;
   }
   return data;
+}
+
+export function handleBalancerFeePercentChanged(
+  event: FlashLoanFeePercentageChanged
+): void {
+  balancerFee = event.params.newFlashLoanFeePercentage;
+}
+export function handleMakerTollChanged(event: File): void {
+  if (event.params.what.toString() == "toll")
+    makerBPS = event.params.data.div(e14);
 }
